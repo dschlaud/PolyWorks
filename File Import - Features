@@ -1,0 +1,305 @@
+version "5.0"
+#=========================================================================================================
+# ---- InnovMetric Software Inc.
+# ---- Module  :    PolyWorks|Inspector
+# ---- Version :    2021 IR7 (build 4774)
+# ---- Date    :    Monday, February 7, 2022 - 10:08:18
+# ---- Author  :    David Schlaud - Nikon Metrology
+#---------------------------------------------------------------------------------------------------------
+#  This macro will take different files with features and translate them into a PolyWorks friendly format
+#
+#  Compatible Formats:
+#    - Nissan
+#        - *.dat
+#
+#    - Company B
+#
+#    - Company C
+#
+#=========================================================================================================
+
+
+# Import Data Files
+
+# Declares
+DECLARE file
+DECLARE file_type
+DECLARE write_file_name
+DECLARE overwrite "Yes"
+DECLARE index
+
+DECLARE date
+DECLARE time
+
+DECLARE nissan_name "Nissan *.DAT"
+DECLARE company2_name "Not Declared"
+DECLARE company3_name "Not Declared"
+DECLARE import_formats { $nissan_name, $company2_name, $company3_name }
+DECLARE extensions "Acceptable File Types: *.DAT;*.txt;"
+
+DECLARE diagBOX_1
+DECLARE diagBOX_1_Result
+
+DECLARE i 1
+DECLARE nb_lines
+DECLARE tmpString
+
+DECLARE Macro_Error
+
+# Prompt for File
+MACRO INPUT DIALOG_BOX DEFINE ( diagBOX_1, "User Input" )
+MACRO INPUT DIALOG_BOX SECTION ( $diagBOX_1, "Select File Import Type", "Off", "Off" )
+MACRO INPUT DIALOG_BOX RADIO_GROUP ( $diagBOX_1, "File Import Type", $import_formats, )
+MACRO INPUT DIALOG_BOX LABEL ( $diagBOX_1, " " )
+MACRO INPUT DIALOG_BOX SECTION ( $diagBOX_1, "Select File For Importing", "Off", "Off" )
+MACRO INPUT DIALOG_BOX FILE_PATH ( $diagBOX_1, "File Location", ,"Off", $extensions )
+MACRO INPUT DIALOG_BOX LABEL ( $diagBOX_1, " " )
+MACRO INPUT DIALOG_BOX SHOW ( $diagBOX_1, "Import", "Quit", diagBOX_1_Result, file_type, file )
+
+IF $diagBOX_1_Result == 0
+    MACRO ECHO ( "User Pressed QUIT Button" )
+    MACRO END ( "No Error" )
+ENDIF
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+# NISSAN .DAT File Format
+#    - New feature - Line starts with "["
+#    - NP2, NPE1, NPE1S
+#    - NBT10S - Door threaded rods
+#    - NSL10, NSL10S
+#    - NCR10, NCR10S
+#    - NDFM10
+#    - NCP21S
+#    - NUT11S
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+IF $file_type == $nissan_name
+    
+    DECLARE x
+    DECLARE y
+    DECLARE z
+    DECLARE dia
+    DECLARE cX
+    DECLARE cY
+    DECLARE cZ
+    DECLARE cX2
+    DECLARE cY2
+    DECLARE cZ2
+    DECLARE dMin
+    DECLARE dMax
+    
+    # Points (x,y,z) Only
+    DECLARE feat_Point_NP2
+    DECLARE iter_Point_NP2 1
+    DECLARE feat_Point_NCP21S
+    DECLARE iter_Point_NCP21S 1
+    # Points with Vector (X,Y,Z,i,j,k)
+    DECLARE feat_Point_NPE1
+    DECLARE iter_Point_NPE1 1
+    DECLARE feat_Point_NPE1S
+    DECLARE iter_Point_NPE1S 1
+    
+    # Circle No Vector (X,Y,Z,Diameter)
+    DECLARE feat_Circle_NDFM10
+    DECLARE iter_Circle_NDFM10 1
+    # Circle with Vector
+    DECLARE feat_Circle_NBT10S
+    DECLARE iter_Circle_NBT10S 1
+    DECLARE feat_Circle_NCR10
+    DECLARE iter_Circle_NCR10 1
+    DECLARE feat_Circle_NCR10S
+    DECLARE iter_Circle_NCR10S 1
+    DECLARE feat_Circle_NUT11S
+    DECLARE iter_Circle_NUT11S 1
+    # Weird One
+    DECLARE feat_Vector_NSL10
+    DECLARE iter_Vector_NSL10 1
+    DECLARE feat_Vector_NSL10S
+    DECLARE iter_Vector_NSL10S 1
+    
+    # get nb of lines
+    DATA_FILE PROPERTIES NB_LINES GET ( $file, nb_lines )
+    
+    # Read the "START Date and time"
+    DATA_FILE READ LINE ( $file, 1, tmpString )
+    
+    # Assume 2nd Row is always empty
+    DATA_FILE READ LINE ( $file, 2, tmpString )
+    MACRO GET_ERROR_STATUS ( Macro_Error )
+    IF $Macro_Error != "Error"
+        #Unexpected empty line
+    ENDIF
+    
+    #Loop to find first feature
+    SET i 2
+    WHILE $i < $nb_lines
+        DATA_FILE READ LINE_FIELDS ( $file, $i, tmpString, " ", "Off" )
+        IF $tmpString == "["
+            ++i
+            BREAK
+        ENDIF
+        ++i
+    ENDWHILE
+    
+    
+    WHILE $i < $nb_lines
+        # Import Features
+        DATA_FILE READ LINE_FIELDS ( $file, $i, tmpString, " ", "Off" )
+        
+        #Determine Feature Type
+        IF $tmpString[3] == "NP2" OR $tmpString[3] == "NCP21S"
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, x, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, y, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, z, " ", "Off" )
+            
+            # FORMAT:  NAME,X,Y,Z
+            IF $tmpString[3] == "NP2"
+                SET feat_Point_NP2[$iter_Point_NP2] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}"
+                ++iter_Point_NP2
+                
+            ELSEIF $tmpString[3] == "NCP21S"
+                SET feat_Point_NCP21S[$iter_Point_NCP21S] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}"
+                ++iter_Point_NCP21S
+                
+            ENDIF
+            ++i
+            
+        ELSEIF $tmpString[3] == "NDFM10"
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, x, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, y, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, z, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, dia, " ", "Off" )
+            
+            # NAME,X,Y,Z,dia
+            SET feat_Circle_NDFM10[$iter_Circle_NDFM10] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]},${dia[2]}"
+            ++iter_Circle_NDFM10
+            ++i
+            
+            
+            # Vector Points (Comparison Points)
+        ELSEIF $tmpString[3] == "NPE1" OR $tmpString[3] == "NPE1S"
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, x, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, y, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, z, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cX, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cY, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cZ, " ", "Off" )
+            
+            # NAME,X,Y,Z,i,j,k
+            IF $tmpString[3] == "NPE1"
+                SET feat_Point_NPE1[$iter_Point_NPE1] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}${cX[2]},${cY[2]},${cZ[2]}"
+                ++iter_Point_NPE1
+                
+            ELSEIF $tmpString[3] == "NPE1S"
+                SET feat_Point_NPE1S[$iter_Point_NPE1S] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}${cX[2]},${cY[2]},${cZ[2]}"
+                ++iter_Point_NPE1S
+            ENDIF
+            ++i
+            
+        ELSEIF $tmpString[3] == "NBT10S" OR $tmpString[3] == "NCR10" OR $tmpString[3] == "NCR10S" OR $tmpString[3] == "NUT11S"
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, x, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, y, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, z, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, dia, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cX, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cY, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cZ, " ", "Off" )
+            
+            # NAME,X,Y,Z,i,j,k,dia
+            IF $tmpString[3] == "NBT10S"
+                SET feat_Circle_NBT10S[$iter_Circle_NBT10S] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}${cX[2]},${cY[2]},${cZ[2]},${dia[2]}"
+                ++iter_Circle_NBT10S
+            ELSEIF $tmpString[3] == "NCR10"
+                SET feat_Circle_NCR10[$iter_Circle_NCR10] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}${cX[2]},${cY[2]},${cZ[2]},${dia[2]}"
+                ++iter_Circle_NCR10
+            ELSEIF $tmpString[3] == "NCR10S"
+                SET feat_Circle_NCR10S[$iter_Circle_NCR10S] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}${cX[2]},${cY[2]},${cZ[2]},${dia[2]}"
+                ++iter_Circle_NCR10S
+            ELSEIF $tmpString[3] == "NUT11S"
+                SET feat_Circle_NUT11S[$iter_Circle_NUT11S] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]}${cX[2]},${cY[2]},${cZ[2]},${dia[2]}"
+                ++iter_Circle_NUT11S
+            ENDIF
+            ++i
+            
+        ELSEIF $tmpString[3] == "NSL10" OR $tmpString[3] == "NSL10S"
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, x, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, y, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, z, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, dMin, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, dMax, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cX, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cY, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cZ, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cX2, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cY2, " ", "Off" )
+            ++i
+            DATA_FILE READ LINE_FIELDS ( $file, $i, cZ2, " ", "Off" )
+            
+            # NAME,X,Y,Z,dMin,dMax,cX,cY,cZ,,cX2,cY2,cZ2
+            IF $tmpString[3] == "NSL10"
+                SET feat_Vector_NSL10[$iter_Vector_NSL10] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]},${dMin[2]},${dMax[2]},${cX[2]},${cY[2]},${cZ[2]},${cX2[2]},${cY2[2]},${cZ2[2]}"
+                ++iter_Vector_NSL10
+            ELSEIF $tmpString[3] == "NSL10S"
+                SET feat_Vector_NSL10S[$iter_Vector_NSL10S] "${tmpString[2]}_${tmpString[3]},${x[2]},${y[2]},${z[2]},${dMin[2]},${dMax[2]},${cX[2]},${cY[2]},${cZ[2]},${cX2[2]},${cY2[2]},${cZ2[2]}"
+                ++iter_Vector_NSL10S
+            ENDIF
+            ++i
+        ENDIF
+        ++i
+        ++i
+    ENDWHILE
+    
+    MACRO STRING FIND_LAST ( $file, ".", , index )
+    MACRO STRING REPLACE ( $file, ".", "_formatted.", $index,, write_file_name )
+    
+    # Write Features to File
+    DATA_FILE CREATE ( $write_file_name,, $overwrite )
+    
+    # Append Data To File
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Point_NP2 )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Point_NCP21S )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Point_NPE1 )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Point_NPE1S )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Circle_NDFM10 )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Circle_NBT10S )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Circle_NCR10 )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Circle_NCR10S )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Circle_NUT11S )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Vector_NSL10 )
+    DATA_FILE APPEND LINES ( $write_file_name, $feat_Vector_NSL10S )
+    
+    
+    
+ENDIF
+
+
